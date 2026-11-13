@@ -96,6 +96,47 @@
   #help p{font-size:12px;color:#8fb8d8;line-height:1.8;margin-bottom:8px}
   #help .key{display:inline-block;background:rgba(120,200,255,.15);border:1px solid rgba(120,200,255,.4);padding:2px 8px;border-radius:3px;font-family:monospace;color:#88ddff;font-size:11px;margin:0 2px}
   #help .close{margin-top:24px;padding:10px 30px;font-size:11px;letter-spacing:3px;background:transparent;color:#cfe8ff;border:1px solid rgba(120,200,255,.5);border-radius:4px;cursor:pointer}
+/* Mobile touch controls */
+  #mobileControls{display:none;position:fixed;inset:0;z-index:25;pointer-events:none;touch-action:none;font-family:Arial,sans-serif}
+  #lookZone{position:absolute;top:12%;right:0;bottom:150px;width:54%;pointer-events:auto;touch-action:none}
+  #movePad{position:absolute;left:14px;bottom:22px;width:142px;height:142px;pointer-events:auto;touch-action:none}
+  .moveKey,.touchBtn{position:absolute;display:flex;align-items:center;justify-content:center;color:#e8f7ff;background:rgba(10,28,42,.72);border:1px solid rgba(130,210,255,.55);border-radius:14px;font-weight:700;user-select:none;-webkit-user-select:none;touch-action:none;box-shadow:0 3px 12px rgba(0,0,0,.35)}
+  .moveKey{width:46px;height:46px;font-size:20px}
+  #moveUp{left:48px;top:0} #moveDown{left:48px;bottom:0} #moveLeft{left:0;top:48px} #moveRight{right:0;top:48px}
+  #actionPad{position:absolute;right:12px;bottom:16px;width:184px;height:150px;pointer-events:none}
+  .touchBtn{pointer-events:auto;min-width:48px;height:46px;padding:0 10px;font-size:10px;letter-spacing:.5px}
+  .touchBtn:active,.moveKey:active{background:rgba(40,110,150,.9);transform:scale(.96)}
+  #touchFire{right:0;bottom:52px;width:66px;height:66px;border-radius:50%;font-size:12px;background:rgba(130,35,35,.8);border-color:rgba(255,130,130,.8)}
+  #touchJump{right:76px;bottom:0} #touchCollect{right:76px;bottom:52px}
+  #touchSprint{right:0;bottom:0} #touchHeal{right:0;top:0}
+  #touchInventory{right:76px;top:0} #touchMap{right:0;top:0}
+  #touchReload{right:76px;bottom:104px}
+  #touchPause{left:12px;top:12px}
+  @media (pointer:coarse),(max-width:700px){
+    #mobileControls{display:block}
+    #stats{left:10px;bottom:178px;width:155px;padding:8px}
+    #stats .label{font-size:8px}
+    .bar{height:7px;margin-bottom:5px}
+    #minimap{top:10px;right:10px;width:104px;height:104px}
+    #status{top:10px;left:10px;padding:6px 9px;font-size:9px}
+    #objective{top:46px;left:10px;max-width:155px;padding:7px 9px;font-size:9px}
+    #objective h4{font-size:8px}
+    #fps{display:none}
+    #prompt{bottom:165px;font-size:10px;padding:7px 10px}
+    #toasts{top:120px;max-width:75%;font-size:10px}
+    #start{padding:18px;overflow:auto}
+    #start h1{font-size:clamp(26px,8vw,42px);letter-spacing:6px;text-align:center}
+    #start .tag{font-size:9px;letter-spacing:2px;margin-bottom:24px;text-align:center}
+    #start .menu{margin-bottom:15px}
+    #start .menu button{min-width:min(82vw,300px);padding:13px 22px}
+    #start .controls{font-size:8px;letter-spacing:.6px;padding-top:12px}
+    #inv{width:94vw;padding:12px;max-height:78vh}
+    .grid{grid-template-columns:repeat(4,1fr);gap:6px}
+    #invactions button{padding:9px 10px}
+    #settings .inner{width:92vw;padding:20px}
+    #help .inner{width:92vw;max-height:85vh;overflow:auto;padding:18px}
+    #pause h1,#gameover h1{font-size:26px;letter-spacing:7px}
+  }
 </style>
 </head>
 <body>
@@ -133,6 +174,26 @@
   <div id="prompt" class="panel"><kbd>E</kbd><span id="ptxt">Collect</span></div>
   <div id="toasts"></div>
   <div id="fps" class="panel">FPS --</div>
+</div>
+<div id="mobileControls" aria-label="Mobile game controls">
+  <div id="lookZone" aria-label="Drag here to look around"></div>
+  <div id="movePad" aria-label="Movement controls">
+    <button class="moveKey" id="moveUp" aria-label="Move forward">▲</button>
+    <button class="moveKey" id="moveLeft" aria-label="Move left">◀</button>
+    <button class="moveKey" id="moveDown" aria-label="Move backward">▼</button>
+    <button class="moveKey" id="moveRight" aria-label="Move right">▶</button>
+  </div>
+  <div id="actionPad">
+    <button class="touchBtn" id="touchHeal">HEAL</button>
+    <button class="touchBtn" id="touchInventory">BAG</button>
+    <button class="touchBtn" id="touchMap">MAP</button>
+    <button class="touchBtn" id="touchReload">RELOAD</button>
+    <button class="touchBtn" id="touchCollect">PICKUP</button>
+    <button class="touchBtn" id="touchFire">FIRE</button>
+    <button class="touchBtn" id="touchJump">JUMP</button>
+    <button class="touchBtn" id="touchSprint">RUN</button>
+  </div>
+  <button class="touchBtn" id="touchPause">PAUSE</button>
 </div>
 <div id="damageflash"></div>
 
@@ -800,6 +861,8 @@ try {
 
   // ─── Input ────────────────────────────────────────────────────────────────
   const keys = {};
+  const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  if (isTouchDevice) document.body.classList.add('touch-device');
   let locked = false, mdx = 0, mdy = 0;
 
   addEventListener('keydown', e => {
@@ -812,6 +875,53 @@ try {
     if (e.code === 'KeyR') reloadAmmo();
   });
   addEventListener('keyup', e => { keys[e.code] = false; });
+
+  // Touch movement/look controls.
+  const touchKeyMap = {moveUp:'KeyW',moveDown:'KeyS',moveLeft:'KeyA',moveRight:'KeyD'};
+  for (const [id, code] of Object.entries(touchKeyMap)) {
+    const el = document.getElementById(id);
+    el.addEventListener('pointerdown', e => { e.preventDefault(); el.setPointerCapture(e.pointerId); keys[code] = true; });
+    const release = e => { e.preventDefault(); keys[code] = false; };
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', release);
+    el.addEventListener('lostpointercapture', () => { keys[code] = false; });
+  }
+  const lookZone = document.getElementById('lookZone');
+  let lookPointer = null, lastLookX = 0, lastLookY = 0;
+  lookZone.addEventListener('pointerdown', e => {
+    if (!state.started || state.paused || state.gameOver) return;
+    e.preventDefault(); lookPointer = e.pointerId; lastLookX = e.clientX; lastLookY = e.clientY;
+    lookZone.setPointerCapture(e.pointerId);
+  });
+  lookZone.addEventListener('pointermove', e => {
+    if (e.pointerId !== lookPointer) return;
+    e.preventDefault();
+    mdx += e.clientX - lastLookX; mdy += e.clientY - lastLookY;
+    lastLookX = e.clientX; lastLookY = e.clientY;
+  });
+  const stopLook = e => { if (e.pointerId === lookPointer) lookPointer = null; };
+  lookZone.addEventListener('pointerup', stopLook);
+  lookZone.addEventListener('pointercancel', stopLook);
+
+  const touchAction = (id, action) => document.getElementById(id).addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    if (!state.started || state.paused || state.gameOver) return;
+    action();
+  });
+  touchAction('touchFire', shoot);
+  touchAction('touchCollect', tryCollect);
+  touchAction('touchHeal', useMedkit);
+  touchAction('touchInventory', toggleInv);
+  touchAction('touchMap', toggleBigMap);
+  touchAction('touchReload', reloadAmmo);
+  touchAction('touchJump', () => { keys.Space = true; setTimeout(() => { keys.Space = false; }, 180); });
+  touchAction('touchSprint', () => { keys.ShiftLeft = true; setTimeout(() => { keys.ShiftLeft = false; }, 450); });
+  document.getElementById('touchPause').addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    if (!state.started || state.gameOver) return;
+    state.paused = !state.paused;
+    document.getElementById('pause').style.display = state.paused ? 'flex' : 'none';
+  });
 
   addEventListener('mousemove', e => {
     if (!locked) return;
@@ -852,7 +962,7 @@ try {
   }
 
   function tryCollect() {
-    if (!locked) return;
+    if (!state.started || state.paused || state.gameOver) return;
     const origin = camera.position.clone();
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
     let best = null, bestD = 3.5;
@@ -882,7 +992,7 @@ try {
   }
 
   function useMedkit() {
-    if (!locked) return;
+    if (!state.started || state.paused || state.gameOver) return;
     const slot = player.inventory['medkit'];
     if (!slot || slot.count <= 0) { toast('No medical kit', true); sfx('error'); return; }
     if (player.health >= 100) { toast('Health is full'); return; }
@@ -1129,7 +1239,7 @@ try {
 
   // ─── Player Movement ──────────────────────────────────────────────────────
   function updatePlayer(dt) {
-    if (!locked) { mdx = mdy = 0; return; }
+    if (!locked && !isTouchDevice) { mdx = mdy = 0; return; }
     const sens = 0.0022 * state.sensMultiplier;
     player.yaw -= mdx * sens;
     player.pitch -= mdy * sens;
@@ -1203,7 +1313,8 @@ try {
     player.pos.set(0, terrainHeight(0, 0) + 1, 0);
     player.vel.set(0, 0, 0);
     document.getElementById('gameover').style.display = 'none';
-    renderer.domElement.requestPointerLock();
+    if (!isTouchDevice) renderer.domElement.requestPointerLock();
+    else { locked = false; document.getElementById('pause').style.display = 'none'; }
     toast('Revived at the field station');
   }
 
@@ -1354,7 +1465,8 @@ try {
       spawnFeral();
       spawnFeral();
     }
-    renderer.domElement.requestPointerLock();
+    if (!isTouchDevice) renderer.domElement.requestPointerLock();
+    else { locked = false; document.getElementById('mobileControls').style.display = 'block'; }
     toast('Welcome to the Frontier, Explorer');
     setTimeout(() => toast('Ferals are hostile — MOUSE1 to fire'), 1800);
   }
@@ -1362,7 +1474,10 @@ try {
   // ─── Pause / Resume ───────────────────────────────────────────────────────
   document.getElementById('pause').addEventListener('click', (e) => {
     if (e.target.closest('button')) return;
-    renderer.domElement.requestPointerLock();
+    if (isTouchDevice) {
+      state.paused = false;
+      document.getElementById('pause').style.display = 'none';
+    } else renderer.domElement.requestPointerLock();
   });
   document.getElementById('pauseSettings').addEventListener('click', (e) => {
     e.stopPropagation();
