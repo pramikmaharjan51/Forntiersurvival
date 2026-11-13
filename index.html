@@ -998,3 +998,415 @@ try {
       el.style.display = 'flex';
       if (locked) document.exitPointerLock();
       drawBigMap();
+    }
+  }
+
+  function drawBigMap() {
+    const c = document.getElementById('bigmapc');
+    const ctx = c.getContext('2d');
+    const S = c.width, sc = S / 200;
+    ctx.clearRect(0, 0, S, S);
+    ctx.fillStyle = '#0a1424';
+    ctx.fillRect(0, 0, S, S);
+    for (let r = 0; r < 40; r++) {
+      ctx.strokeStyle = `rgba(80,140,80,${0.04 + r * 0.005})`;
+      ctx.beginPath();
+      ctx.arc(S / 2, S / 2, (r / 40) * S / 2, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(40,100,150,0.4)';
+    ctx.beginPath();
+    ctx.arc(S / 2 + (-0.28) * 200 * sc, S / 2 + (0.22) * 200 * sc, 0.15 * 200 * sc, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#88aacc';
+    const stScreenX = S / 2 + STATION.x * sc;
+    const stScreenZ = S / 2 + STATION.z * sc;
+    ctx.fillRect(stScreenX - 8, stScreenZ - 8, 16, 16);
+    ctx.font = 'bold 11px monospace';
+    ctx.fillStyle = '#88aacc';
+    ctx.fillText('FIELD STATION', stScreenX + 14, stScreenZ + 4);
+    for (const cr of crates) {
+      if (cr.collected) continue;
+      ctx.fillStyle = '#' + cr.type.color.toString(16).padStart(6, '0');
+      ctx.beginPath();
+      ctx.arc(S / 2 + cr.mesh.position.x * sc, S / 2 + cr.mesh.position.z * sc, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (const f of ferals) {
+      if (!f.rb.alive) continue;
+      ctx.fillStyle = '#ff2233';
+      ctx.beginPath();
+      ctx.arc(S / 2 + f.rb.pos.x * sc, S / 2 + f.rb.pos.z * sc, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const px = S / 2 + player.pos.x * sc;
+    const pz = S / 2 + player.pos.z * sc;
+    ctx.save();
+    ctx.translate(px, pz);
+    ctx.rotate(-player.yaw);
+    ctx.fillStyle = '#88ddff';
+    ctx.beginPath();
+    ctx.moveTo(0, -14); ctx.lineTo(9, 9); ctx.lineTo(0, 4); ctx.lineTo(-9, 9); ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = '#8fb8d8';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('N', S / 2 - 6, 22);
+    ctx.strokeStyle = 'rgba(120,200,255,0.3)';
+    ctx.strokeRect(2, 2, S - 4, S - 4);
+  }
+
+  // ─── Minimap ──────────────────────────────────────────────────────────────
+  const mm = document.getElementById('mmc'), mmx = mm.getContext('2d');
+  function drawMini() {
+    const S = 180, cx = S / 2, cy = S / 2, sc = S / 200;
+    mmx.clearRect(0, 0, S, S);
+    mmx.fillStyle = 'rgba(10,22,34,0.92)';
+    mmx.fillRect(0, 0, S, S);
+    for (let r = 1; r <= 5; r++) {
+      mmx.strokeStyle = `rgba(80,140,80,${0.18 / r})`;
+      mmx.beginPath(); mmx.arc(cx, cy, r * 17, 0, Math.PI * 2); mmx.stroke();
+    }
+    for (const cr of crates) {
+      if (cr.collected) continue;
+      const x = cx + cr.mesh.position.x * sc;
+      const y = cy + cr.mesh.position.z * sc;
+      if (Math.hypot(x - cx, y - cy) > S / 2 - 4) continue;
+      mmx.fillStyle = '#' + cr.type.color.toString(16).padStart(6, '0');
+      mmx.beginPath(); mmx.arc(x, y, 2, 0, Math.PI * 2); mmx.fill();
+    }
+    for (const f of ferals) {
+      if (!f.rb.alive) continue;
+      const x = cx + f.rb.pos.x * sc, y = cy + f.rb.pos.z * sc;
+      if (Math.hypot(x - cx, y - cy) > S / 2 - 4) continue;
+      mmx.fillStyle = '#ff2233';
+      mmx.beginPath(); mmx.arc(x, y, 3, 0, Math.PI * 2); mmx.fill();
+    }
+    const stx = cx + STATION.x * sc, sty = cy + STATION.z * sc;
+    if (Math.hypot(stx - cx, sty - cy) < S / 2 - 4) {
+      mmx.fillStyle = '#88aacc';
+      mmx.fillRect(stx - 3, sty - 3, 6, 6);
+    }
+    const px = cx + player.pos.x * sc, py = cy + player.pos.z * sc;
+    mmx.save();
+    mmx.translate(px, py);
+    mmx.rotate(-player.yaw);
+    mmx.fillStyle = '#88ddff';
+    mmx.beginPath();
+    mmx.moveTo(0, -7); mmx.lineTo(5, 5); mmx.lineTo(0, 2); mmx.lineTo(-5, 5); mmx.closePath();
+    mmx.fill();
+    mmx.restore();
+  }
+
+  // ─── Toast ────────────────────────────────────────────────────────────────
+  function toast(m, warn) {
+    const el = document.createElement('div');
+    el.className = 'toast' + (warn ? ' warn' : '');
+    el.textContent = m;
+    document.getElementById('toasts').appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  }
+
+  // ─── Audio ────────────────────────────────────────────────────────────────
+  let actx = null;
+  function sfx(kind) {
+    if (state.volume <= 0) return;
+    try {
+      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.connect(g); g.connect(actx.destination);
+      const t = actx.currentTime;
+      const vol = state.volume;
+      if (kind === 'pickup') { o.frequency.value = 660; o.type = 'sine'; g.gain.value = .08 * vol; o.start(); o.frequency.exponentialRampToValueAtTime(990, t + .12); g.gain.exponentialRampToValueAtTime(.001, t + .2); o.stop(t + .22); }
+      else if (kind === 'heal') { o.frequency.value = 440; o.type = 'triangle'; g.gain.value = .1 * vol; o.start(); o.frequency.exponentialRampToValueAtTime(880, t + .3); g.gain.exponentialRampToValueAtTime(.001, t + .35); o.stop(t + .4); }
+      else if (kind === 'error') { o.frequency.value = 200; o.type = 'square'; g.gain.value = .06 * vol; o.start(); g.gain.exponentialRampToValueAtTime(.001, t + .15); o.stop(t + .16); }
+      else if (kind === 'shot') { o.type = 'sawtooth'; o.frequency.value = 180; g.gain.value = .1 * vol; o.start(); o.frequency.exponentialRampToValueAtTime(40, t + .08); g.gain.exponentialRampToValueAtTime(.001, t + .1); o.stop(t + .11); }
+      else if (kind === 'hit') { o.type = 'square'; o.frequency.value = 320; g.gain.value = .09 * vol; o.start(); o.frequency.exponentialRampToValueAtTime(120, t + .06); g.gain.exponentialRampToValueAtTime(.001, t + .08); o.stop(t + .09); }
+      else if (kind === 'hurt') { o.type = 'sawtooth'; o.frequency.value = 110; g.gain.value = .15 * vol; o.start(); o.frequency.exponentialRampToValueAtTime(50, t + .2); g.gain.exponentialRampToValueAtTime(.001, t + .25); o.stop(t + .26); }
+      else if (kind === 'kill') { o.type = 'triangle'; o.frequency.value = 400; g.gain.value = .1 * vol; o.start(); o.frequency.exponentialRampToValueAtTime(150, t + .3); g.gain.exponentialRampToValueAtTime(.001, t + .35); o.stop(t + .36); }
+    } catch (e) { }
+  }
+
+  // ─── Player Movement ──────────────────────────────────────────────────────
+  function updatePlayer(dt) {
+    if (!locked) { mdx = mdy = 0; return; }
+    const sens = 0.0022 * state.sensMultiplier;
+    player.yaw -= mdx * sens;
+    player.pitch -= mdy * sens;
+    player.pitch = Math.max(-Math.PI / 2 + .05, Math.min(Math.PI / 2 - .05, player.pitch));
+    mdx = mdy = 0;
+    const fwd = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+    const rgt = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+    const move = new THREE.Vector3();
+    if (keys['KeyW']) move.add(fwd);
+    if (keys['KeyS']) move.sub(fwd);
+    if (keys['KeyD']) move.add(rgt);
+    if (keys['KeyA']) move.sub(rgt);
+    move.normalize();
+    player.crouching = keys['KeyC'];
+    player.sprinting = keys['ShiftLeft'] && player.stamina > 1 && !player.crouching;
+    const speed = player.crouching ? 2.3 : (player.sprinting ? 8.5 : 5.0);
+    if (player.sprinting) player.stamina = Math.max(0, player.stamina - 22 * dt);
+    else player.stamina = Math.min(100, player.stamina + 14 * dt);
+    player.vel.x += (move.x * speed - player.vel.x) * Math.min(1, 12 * dt);
+    player.vel.z += (move.z * speed - player.vel.z) * Math.min(1, 12 * dt);
+    if (keys['Space'] && player.onGround) {
+      player.vel.y = 7.2; player.onGround = false;
+      player.stamina = Math.max(0, player.stamina - 6);
+    }
+    player.vel.y -= 22 * dt;
+    player.pos.x += player.vel.x * dt;
+    player.pos.z += player.vel.z * dt;
+    player.pos.y += player.vel.y * dt;
+    const b = 96;
+    player.pos.x = Math.max(-b, Math.min(b, player.pos.x));
+    player.pos.z = Math.max(-b, Math.min(b, player.pos.z));
+    const g = Math.max(terrainHeight(player.pos.x, player.pos.z), -1.0);
+    if (player.pos.y <= g) { player.pos.y = g; player.vel.y = 0; player.onGround = true; }
+    const drain = player.sprinting ? 1.5 : (player.crouching ? .5 : 1);
+    player.hydration = Math.max(0, player.hydration - .8 * dt * drain);
+    if (player.hydration < 5) player.health = Math.max(0, player.health - 3 * dt);
+    if (player.health <= 0 && !state.gameOver) triggerGameOver();
+    const eye = 1.65 - (player.crouching ? .45 : 0);
+    const bob = (Math.abs(player.vel.x) + Math.abs(player.vel.z) > .5 && player.onGround)
+      ? Math.sin(performance.now() * .012) * .03 : 0;
+    camera.position.set(player.pos.x, player.pos.y + eye + bob, player.pos.z);
+    camera.rotation.order = 'YXZ';
+    camera.rotation.y = player.yaw;
+    camera.rotation.x = player.pitch;
+    sun.target.position.set(player.pos.x, 0, player.pos.z);
+  }
+
+  // ─── Objective ────────────────────────────────────────────────────────────
+  function updateObjective() {
+    const distToStation = Math.hypot(player.pos.x - STATION.x, player.pos.z - STATION.z);
+    if (distToStation < 8) {
+      state.objective = '✓ Field station reached. Explore the frontier and survive.';
+    } else {
+      state.objective = `Locate the field station — ${Math.round(distToStation)}m to the northeast.`;
+    }
+    document.getElementById('objtext').textContent = state.objective;
+  }
+
+  // ─── Game Over ────────────────────────────────────────────────────────────
+  function triggerGameOver() {
+    state.gameOver = true;
+    state.paused = true;
+    document.getElementById('gameover').style.display = 'flex';
+    if (locked) document.exitPointerLock();
+  }
+
+  function respawn() {
+    state.gameOver = false;
+    state.paused = false;
+    player.health = 100; player.hydration = 100; player.stamina = 100;
+    player.pos.set(0, terrainHeight(0, 0) + 1, 0);
+    player.vel.set(0, 0, 0);
+    document.getElementById('gameover').style.display = 'none';
+    renderer.domElement.requestPointerLock();
+    toast('Revived at the field station');
+  }
+
+  // ─── Main Loop ────────────────────────────────────────────────────────────
+  let last = performance.now(), frames = 0, acc = 0, fps = 0;
+  let feralSpawnAcc = 0;
+
+  function loop() {
+    requestAnimationFrame(loop);
+    const now = performance.now();
+    let dt = (now - last) / 1000; last = now;
+    dt = Math.min(dt, .05);
+
+    if (state.started && !state.paused && !state.gameOver) {
+      updatePlayer(dt);
+
+      physAccum += dt;
+      let steps = 0;
+      while (physAccum >= PHYSICS_STEP && steps < 6) {
+        physAccum -= PHYSICS_STEP;
+        steps++;
+        for (let i = ferals.length - 1; i >= 0; i--) {
+          const f = ferals[i];
+          if (f.rb.alive) updateFeralAI(f, PHYSICS_STEP, player.pos);
+          f.rb.integrate(PHYSICS_STEP, terrainHeight);
+          f.rb.applyToMesh(f.mesh);
+          if (f.rb.alive) {
+            f.mesh.rotation.x = 0; f.mesh.rotation.z = 0; f.mesh.rotation.y = f.yaw;
+          }
+          if (!f.rb.alive && f.deathTime && now - f.deathTime > 2500) {
+            feralGroup.remove(f.mesh);
+            ferals.splice(i, 1);
+          }
+        }
+        updateDebris(PHYSICS_STEP);
+      }
+
+      feralSpawnAcc += dt * 1000;
+      if (feralSpawnAcc > 5000) {
+        feralSpawnAcc = 0;
+        spawnFeral();
+      }
+
+      for (const cr of crates) {
+        if (cr.collected) continue;
+        cr.phase += dt * 2;
+        cr.mesh.position.y = cr.baseY + Math.sin(cr.phase) * .15;
+        cr.mesh.rotation.y += dt * 1.2;
+        cr.ring.rotation.z += dt * .8;
+      }
+
+      updateObjective();
+      findNearestCrate();
+    }
+
+    frames++; acc += dt;
+    if (acc > .5) {
+      fps = Math.round(frames / acc); frames = 0; acc = 0;
+      document.getElementById('hp').style.width = player.health + '%';
+      document.getElementById('hpv').textContent = Math.round(player.health);
+      document.getElementById('st').style.width = player.stamina + '%';
+      document.getElementById('stv').textContent = Math.round(player.stamina);
+      document.getElementById('hy').style.width = player.hydration + '%';
+      document.getElementById('hyv').textContent = Math.round(player.hydration);
+      document.getElementById('fps').textContent = `FPS ${fps} · AMMO ${state.ammo} · FERALS ${ferals.filter(f => f.rb.alive).length}`;
+      if (state.started) drawMini();
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  function findNearestCrate() {
+    const origin = camera.position.clone();
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    let best = null, bestD = 3.5;
+    for (const c of crates) {
+      if (c.collected) continue;
+      const d = c.mesh.position.distanceTo(origin);
+      if (d < bestD) {
+        const to = c.mesh.position.clone().sub(origin).normalize();
+        if (to.dot(dir) > 0.35) { best = c; bestD = d; }
+      }
+    }
+    const p = document.getElementById('prompt');
+    if (best) {
+      p.style.display = 'block';
+      document.getElementById('ptxt').textContent = `Collect ${best.type.name}`;
+    } else p.style.display = 'none';
+  }
+
+  // ─── Settings ─────────────────────────────────────────────────────────────
+  document.getElementById('sensSlider').addEventListener('input', (e) => {
+    state.sensMultiplier = parseFloat(e.target.value);
+    document.getElementById('sensVal').textContent = state.sensMultiplier.toFixed(1);
+  });
+  document.getElementById('fovSlider').addEventListener('input', (e) => {
+    state.fov = parseInt(e.target.value);
+    camera.fov = state.fov;
+    camera.updateProjectionMatrix();
+    document.getElementById('fovVal').textContent = state.fov;
+  });
+  document.getElementById('fogSlider').addEventListener('input', (e) => {
+    state.fogFar = parseInt(e.target.value);
+    scene.fog.far = state.fogFar;
+    document.getElementById('fogVal').textContent = state.fogFar;
+  });
+  document.getElementById('volSlider').addEventListener('input', (e) => {
+    state.volume = parseInt(e.target.value) / 100;
+    document.getElementById('volVal').textContent = e.target.value;
+  });
+  document.getElementById('settingsClose').addEventListener('click', () => {
+    document.getElementById('settings').style.display = 'none';
+  });
+
+  // ─── Start Menu ───────────────────────────────────────────────────────────
+  document.getElementById('btnNewGame').addEventListener('click', () => {
+    if (hasSave() && !confirm('Start a new expedition? Current progress will be erased.')) return;
+    clearSave();
+    startGame();
+  });
+
+  document.getElementById('btnContinue').addEventListener('click', () => {
+    if (!hasSave()) { toast('No saved expedition found — start a new one'); return; }
+    loadGame();
+    startGame();
+  });
+
+  document.getElementById('btnSettings').addEventListener('click', () => {
+    document.getElementById('settings').style.display = 'flex';
+  });
+
+  document.getElementById('btnHelp').addEventListener('click', () => {
+    document.getElementById('help').style.display = 'flex';
+  });
+  document.getElementById('helpClose').addEventListener('click', () => {
+    document.getElementById('help').style.display = 'none';
+  });
+
+  function startGame() {
+    document.getElementById('start').style.display = 'none';
+    document.getElementById('hud').classList.remove('hidden');
+    state.started = true;
+    state.paused = false;
+    state.gameOver = false;
+    if (!hasSave()) {
+      player.pos.set(0, terrainHeight(0, 0) + 1, 0);
+      populateCrates();
+      spawnFeral();
+      spawnFeral();
+    }
+    renderer.domElement.requestPointerLock();
+    toast('Welcome to the Frontier, Explorer');
+    setTimeout(() => toast('Ferals are hostile — MOUSE1 to fire'), 1800);
+  }
+
+  // ─── Pause / Resume ───────────────────────────────────────────────────────
+  document.getElementById('pause').addEventListener('click', (e) => {
+    if (e.target.closest('button')) return;
+    renderer.domElement.requestPointerLock();
+  });
+  document.getElementById('pauseSettings').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('settings').style.display = 'flex';
+  });
+
+  document.getElementById('respawnBtn').addEventListener('click', () => {
+    respawn();
+  });
+
+  // ─── Resize ───────────────────────────────────────────────────────────────
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+  addEventListener('contextmenu', e => { if (locked) e.preventDefault(); });
+
+  // ─── Autosave ─────────────────────────────────────────────────────────────
+  setInterval(() => {
+    if (state.started && !state.gameOver) saveGame();
+  }, 5000);
+
+  // ─── Boot ─────────────────────────────────────────────────────────────────
+  renderInv();
+
+  // Update Continue button based on save availability
+  if (hasSave()) {
+    const btn = document.getElementById('btnContinue');
+    btn.disabled = false;
+    btn.innerHTML = 'CONTINUE<small>Resume your saved expedition</small>';
+  }
+
+  loop();
+  console.log('%c[FRONTIER] Boot complete — ready to play', 'color:#66ff88;font-weight:bold');
+
+} catch (err) {
+  // Any error during init is caught here and surfaced visibly
+  console.error('[FRONTIER BOOT ERROR]', err);
+  const overlay = document.getElementById('bootError');
+  const msgEl = document.getElementById('bootErrorMsg');
+  overlay.style.display = 'flex';
+  msgEl.textContent = (err && err.message) || String(err);
+}
+</script>
+</body>
+</html>
